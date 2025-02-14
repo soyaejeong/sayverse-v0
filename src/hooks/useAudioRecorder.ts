@@ -1,6 +1,10 @@
 // useAudioRecorder.ts
 import { useState, useRef, useCallback } from 'react';
 
+// Constants for MediaRecorder configuration
+const MEDIA_RECORDER_OPTIONS = { mimeType: 'audio/webm' };
+const CHUNK_INTERVAL = 100; // Collect data every 100ms
+
 interface UseAudioRecorderProps {
   maxDuration?: number; // Maximum recording duration in milliseconds (default: 60000ms/60s)
   onTimeUpdate?: (time: number) => void; // Callback function to handle time updates
@@ -24,12 +28,9 @@ export function useAudioRecorder({
   const shouldResetDuration = useRef(false); // Flag to determine if duration should reset on stop
 
   // Common function to handle cleanup when stopping recording
-  const cleanupRecording = useCallback((shouldResetOnStop: boolean = false, skipStop: boolean = false) => {
+  const cleanupRecording = useCallback(() => {
     if (mediaRecorder.current?.state === 'recording') {
-      // Only call stop() if not skipping (for maxDuration case)
-      if (!skipStop) {
-        mediaRecorder.current.stop();
-      }
+      mediaRecorder.current.stop();
       
       // Stop all audio tracks
       mediaRecorder.current.stream.getTracks().forEach(track => track.stop());
@@ -43,18 +44,18 @@ export function useAudioRecorder({
       // Update recording state
       setIsRecording(false);
       
-      // Set flag for duration reset if needed
-      shouldResetDuration.current = shouldResetOnStop;
+      // Always reset duration when stopping
+      shouldResetDuration.current = true;
     }
   }, []);
 
   // Function to stop recording and cleanup resources
-  // When manually stopping recording:
+  // When stopping recording:
   // - We want to reset the duration to 0
   // - We want to execute the MediaRecorder's stop method
   // - We want to clean up all resources (tracks, intervals)
   const stopRecording = useCallback(() => {
-    cleanupRecording(true, false); // Set shouldResetOnStop to true to ensure duration resets
+    cleanupRecording();
   }, [cleanupRecording]);
 
   // Function to update recording duration and check for max duration
@@ -66,11 +67,11 @@ export function useAudioRecorder({
     const elapsed = currentTime - startTime.current;
     
     // If we've exceeded maxDuration:
-    // 1. Stop the MediaRecorder (skipStop = false)
-    // 2. Reset the duration (shouldResetOnStop = true)
+    // 1. Stop the MediaRecorder
+    // 2. Reset the duration
     // 3. Clean up resources (tracks, intervals)
     if (elapsed >= maxDuration) {
-      cleanupRecording(true, false);
+      cleanupRecording();
       return;
     }
     
@@ -89,9 +90,7 @@ export function useAudioRecorder({
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       
       // Create new MediaRecorder instance
-      mediaRecorder.current = new MediaRecorder(stream, {
-        mimeType: 'audio/webm'
-      });
+      mediaRecorder.current = new MediaRecorder(stream, MEDIA_RECORDER_OPTIONS);
 
       // Handle data available event
       mediaRecorder.current.ondataavailable = (e) => {
@@ -114,10 +113,10 @@ export function useAudioRecorder({
       };
 
       // Start recording
-      mediaRecorder.current.start(100); // Collect data every 100ms
+      mediaRecorder.current.start(CHUNK_INTERVAL);
       startTime.current = Date.now();
       // Set up interval for duration updates
-      timer.current = window.setInterval(updateTime, 100);
+      timer.current = window.setInterval(updateTime, CHUNK_INTERVAL);
       setIsRecording(true);
       setError(null);
     } catch (err) {
