@@ -47,11 +47,12 @@ export default function RecordPage() {
               size="lg"
               className="w-full"
               onClick={isRecording ? stopRecording : startRecording}
+              disabled={isRecording && duration >= 60000}
             >
               {isRecording ? (
                 <>
                   <Square className="w-4 h-4 mr-2" />
-                  Stop Recording
+                  {duration >= 60000 ? 'Time Limit Reached' : 'Stop Recording'}
                 </>
               ) : (
                 <>

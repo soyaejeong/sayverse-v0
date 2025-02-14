@@ -38,17 +38,19 @@ jest.mock('@/components/ui/card', () => ({
 }));
 
 jest.mock('@/components/ui/button', () => ({
-  Button: ({ children, className, size, onClick }: { 
+  Button: ({ children, className, size, onClick, disabled }: { 
     children: React.ReactNode; 
     className?: string; 
     size?: string;
     onClick?: () => void;
+    disabled?: boolean;
   }) => (
     <button 
       data-testid="mock-button" 
       className={className} 
       data-size={size}
       onClick={onClick}
+      disabled={disabled}
     >
       {children}
     </button>
@@ -182,5 +184,50 @@ describe('RecordPage Component', () => {
     expect(useAudioRecorder).toHaveBeenCalledWith({
       maxDuration: 60000,
     });
+  });
+
+  it('shows Time Limit Reached text when duration reaches 60000ms', () => {
+    (useAudioRecorder as jest.Mock).mockReturnValue({
+      isRecording: true,
+      audioBlob: null,
+      error: null,
+      duration: 60000,
+      startRecording: mockStartRecording,
+      stopRecording: mockStopRecording,
+    });
+
+    render(<RecordPage />);
+    expect(screen.getByText('Time Limit Reached')).toBeInTheDocument();
+  });
+
+  it('disables the button when recording reaches time limit', () => {
+    (useAudioRecorder as jest.Mock).mockReturnValue({
+      isRecording: true,
+      audioBlob: null,
+      error: null,
+      duration: 60000,
+      startRecording: mockStartRecording,
+      stopRecording: mockStopRecording,
+    });
+
+    render(<RecordPage />);
+    const button = screen.getByTestId('mock-button');
+    expect(button).toBeDisabled();
+  });
+
+  it('continues to show Stop Recording text before reaching time limit', () => {
+    (useAudioRecorder as jest.Mock).mockReturnValue({
+      isRecording: true,
+      audioBlob: null,
+      error: null,
+      duration: 59999,
+      startRecording: mockStartRecording,
+      stopRecording: mockStopRecording,
+    });
+
+    render(<RecordPage />);
+    expect(screen.getByText('Stop Recording')).toBeInTheDocument();
+    const button = screen.getByTestId('mock-button');
+    expect(button).not.toBeDisabled();
   });
 });
