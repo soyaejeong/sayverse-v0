@@ -1,7 +1,29 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import RecordPage from '../page';
+import { useAudioRecorder } from '@/hooks/useAudioRecorder';
+
+// Mock Lucide React icons
+jest.mock('lucide-react', () => ({
+  Mic: () => <span data-testid="mic-icon">Mic Icon</span>,
+  Square: () => <span data-testid="square-icon">Square Icon</span>,
+}));
+
+// Mock the hooks
+jest.mock('@/hooks/useAudioRecorder');
 
 // Mock the UI components
+jest.mock('@/components/recording/WaveformVisualizer', () => ({
+  WaveformVisualizer: ({ className }: { isRecording: boolean; className?: string }) => (
+    <div data-testid="mock-waveform" className={className}>Waveform</div>
+  ),
+}));
+
+jest.mock('@/components/recording/RecordingTimer', () => ({
+  RecordingTimer: ({ className }: { duration: number; className?: string }) => (
+    <div data-testid="mock-timer" className={className}>Timer</div>
+  ),
+}));
+
 jest.mock('@/components/ui/card', () => ({
   Card: ({ children, className }: { children: React.ReactNode; className?: string }) => (
     <div data-testid="mock-card" className={className}>
@@ -16,14 +38,39 @@ jest.mock('@/components/ui/card', () => ({
 }));
 
 jest.mock('@/components/ui/button', () => ({
-  Button: ({ children, className, size }: { children: React.ReactNode; className?: string; size?: string }) => (
-    <button data-testid="mock-button" className={className} data-size={size}>
+  Button: ({ children, className, size, onClick }: { 
+    children: React.ReactNode; 
+    className?: string; 
+    size?: string;
+    onClick?: () => void;
+  }) => (
+    <button 
+      data-testid="mock-button" 
+      className={className} 
+      data-size={size}
+      onClick={onClick}
+    >
       {children}
     </button>
   ),
 }));
 
 describe('RecordPage Component', () => {
+  const mockStartRecording = jest.fn();
+  const mockStopRecording = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (useAudioRecorder as jest.Mock).mockReturnValue({
+      isRecording: false,
+      audioBlob: null,
+      error: null,
+      duration: 0,
+      startRecording: mockStartRecording,
+      stopRecording: mockStopRecording,
+    });
+  });
+
   it('renders without crashing', () => {
     render(<RecordPage />);
     expect(screen.getByRole('heading')).toBeInTheDocument();
@@ -62,5 +109,78 @@ describe('RecordPage Component', () => {
     render(<RecordPage />);
     const textContainer = screen.getByText('Record Your Voice').parentElement;
     expect(textContainer).toHaveClass('text-center');
+  });
+
+  it('renders WaveformVisualizer and RecordingTimer', () => {
+    render(<RecordPage />);
+    expect(screen.getByTestId('mock-waveform')).toBeInTheDocument();
+    expect(screen.getByTestId('mock-timer')).toBeInTheDocument();
+  });
+
+  it('handles start recording click', () => {
+    render(<RecordPage />);
+    const button = screen.getByText('Start Recording');
+    fireEvent.click(button);
+    expect(mockStartRecording).toHaveBeenCalled();
+  });
+
+  it('handles stop recording click when recording', () => {
+    (useAudioRecorder as jest.Mock).mockReturnValue({
+      isRecording: true,
+      audioBlob: null,
+      error: null,
+      duration: 5000,
+      startRecording: mockStartRecording,
+      stopRecording: mockStopRecording,
+    });
+
+    render(<RecordPage />);
+    const button = screen.getByText('Stop Recording');
+    fireEvent.click(button);
+    expect(mockStopRecording).toHaveBeenCalled();
+  });
+
+  it('displays error message when error occurs', () => {
+    const errorMessage = 'Failed to access microphone';
+    (useAudioRecorder as jest.Mock).mockReturnValue({
+      isRecording: false,
+      audioBlob: null,
+      error: errorMessage,
+      duration: 0,
+      startRecording: mockStartRecording,
+      stopRecording: mockStopRecording,
+    });
+
+    render(<RecordPage />);
+    expect(screen.getByText(errorMessage)).toBeInTheDocument();
+    expect(screen.getByText(errorMessage)).toHaveClass('text-red-500');
+  });
+
+  it('displays audio player when recording is complete', () => {
+    const mockAudioBlob = new Blob(['mock audio data'], { type: 'audio/webm' });
+    const mockUrl = 'blob:mock-url';
+    URL.createObjectURL = jest.fn(() => mockUrl);
+
+    (useAudioRecorder as jest.Mock).mockReturnValue({
+      isRecording: false,
+      audioBlob: mockAudioBlob,
+      error: null,
+      duration: 0,
+      startRecording: mockStartRecording,
+      stopRecording: mockStopRecording,
+    });
+
+    render(<RecordPage />);
+    const audioElement = screen.getByTestId('mock-button').parentElement?.querySelector('audio');
+    expect(audioElement).toBeInTheDocument();
+    expect(audioElement?.getAttribute('src')).toBe(mockUrl);
+    expect(audioElement).toHaveClass('w-full');
+  });
+
+  it('passes correct maxDuration to useAudioRecorder', () => {
+    render(<RecordPage />);
+    expect(useAudioRecorder).toHaveBeenCalledWith({
+      maxDuration: 60000,
+    });
   });
 });
